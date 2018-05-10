@@ -13,17 +13,64 @@ pipenv install
 ## Usage
 
 ```console
-usage: benchmark.py [-h] [-p PATH] [-n NUMBER] [-l LEVELS] [-d NUM_DIRS]
-                    [-f NUM_FILES]
+usage: benchmark.py [-h] [-p PATH] [-m METHOD] [-c COUNT] [--depth DEPTH]
+                    [--dir-count COUNT] [--file-count COUNT]
+
+Directory size measurement benchmark.
+
+Benchmarks different approaches to directory size determination in Python.
+Note: some approaches are platform dependant!
 
 optional arguments:
-  -h,           --help                show this help message and exit
-  -p PATH,      --path PATH           path to the directory;
-                                      creates temporary test directory, if omitted
-  -n NUMBER,    --number NUMBER       number of times to run the benchmark
-  -l LEVELS,    --levels LEVELS       nesting level when creating test dir
-  -d NUM_DIRS,  --num-dirs NUM_DIRS   number of directories in each test dir
-  -f NUM_FILES, --num-files NUM_FILES number of files in each test dir
+  -h, --help            show this help message and exit
+  -p PATH, --path PATH  Path to the measured directory.
+                        Examples:
+                          - test on current directory:
+                            benchmark.py -p .
+                          - create a temporary test directory:
+                            benchmark.py
+                          - supply a path to another directory:
+                            benchmark.py --path /usr/local/bin
+                        Default:
+                          - creates a temporary test directory and then deletes it.
+                        Exceptions:
+                          - path is not a directory
+                            action: logs an error and quits.
+  -m METHOD, --method METHOD
+                        Name of the measurement method to invoke.
+                        Choices:
+                          - all
+                            description: test all methods.
+                          - os_walk_lstat
+                            description: os.walk with explicit os.lstat call on each file.
+                          - os_walk_getsize_loop
+                            description: os.walk with os.path.getsize call on each file.
+                          - os_walk_getsize_sum
+                            description: os.walk with list comprehension sum in each directory.
+                          - os_scandir_recursive
+                            description: recursive os.scandir with stat.st_size call
+                          - os_du_subprocess
+                            description: subprocess with du -s
+                          - os_find_ls_awk_subprocess
+                            description: find with exec of ls -l and sum done by awk
+                        Default:
+                          - all
+  -c COUNT, --invocation-count COUNT
+                        Number of invocations of the benchmarked methods.
+                        Default:
+                          - 3 invocations.
+  --depth DEPTH         Depth of the temporary test directory.
+                        Ignored, when path is specified.
+                        Default:
+                          - 4 levels of nesting.
+  --dir-count COUNT     Number of subdirectories created at each nesting level.
+                        Ignored, when path is specified.
+                        Default:
+                          - 5 subdirectories.
+  --file-count COUNT    Number of files created at each nesting level.
+                        Ignored, when path is specified.
+                        Default:
+                          - 50 files in each directory.
 ```
 
 ## Example
