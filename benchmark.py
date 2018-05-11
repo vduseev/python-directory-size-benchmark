@@ -5,14 +5,19 @@ import timeit
 
 
 METHODS = dict()
+DU_BLOCK_SIZE = 512
 
 
 class BenchmarkMethod(object):
     def __init__(self, desc=''):
         self.description = desc
+
     def __call__(self, func):
         name = func.__name__
+
         def wrapper(*args, **kwargs):
+            # Determine whether run should be recorded
+            ignore = kwargs.pop('ignore', False)
             # Capture beginning of measurement
             t1 = timeit.default_timer()
             # Call to the underlying function
@@ -20,9 +25,12 @@ class BenchmarkMethod(object):
             # Capture end of measurement
             t2 = timeit.default_timer()
             # Log benchmark results
-            METHODS[name]['timings'].append(t2 - t1)
-            # Return calculation results
-            return size
+            time = t2 - t1
+            if not ignore:
+                METHODS[name]['results'].append({
+                    'time': time,
+                    'size': size
+                })
         # Preserve original function name
         wrapper.name = name
         wrapper.desc = self.description
@@ -31,31 +39,9 @@ class BenchmarkMethod(object):
         METHODS[name] = {
             'func': wrapper,
             'desc': self.description,
-            'timings': []
+            'results': []
         }
         return wrapper
-
-
-def time_function(func):
-    """Time measurement decorator."""
-    def wrapper(*args, **kwargs):
-        # Capture beginning of measurement
-        t1 = timeit.default_timer()
-        # Call to the underlying function
-        size = func(*args, **kwargs)
-        logging.debug('%s: size: %s', time_function.__name__, str(size))
-        # Capture end of measurement
-        t2 = timeit.default_timer()
-        return t2 - t1
-    # Preserve original function name
-    wrapper.__name__ = func.__name__
-    # Register the decorated method within global collection
-    # of methods that we are going to test later
-    METHODS[wrapper.__name__] = {
-        'func': wrapper,
-        'timings': []
-    }
-    return wrapper
 
 
 @BenchmarkMethod(desc='os.walk with explicit os.lstat call on each file.')
@@ -111,27 +97,49 @@ def os_scandir_recursive(path):
 
 
 @BenchmarkMethod(desc='subprocess with du -s')
-def os_du_subprocess(path):
+def du_subprocess(path):
     import subprocess
     size = subprocess.check_output(
         ['du', '-s', path]
     ).split()[0].decode('utf-8')
+    size = int(size) * DU_BLOCK_SIZE
     return size
 
 
 @BenchmarkMethod(desc='find with exec of ls -l and sum done by awk')
-def os_find_ls_awk_subprocess(path):
-    cmd = ('find {1} -type -f '
+def find_ls_awk_subprocess(path):
+    cmd = ('find ' + path + ' -type f '
            '-exec ls -l \'{}\' \; | '
            'awk \'{sum+=$5} END {print sum}\'')
-    def __desc_():
-        return cmd
     import subprocess
     size = subprocess.check_output(
-        cmd,
-        shell=True
+        cmd, shell=True
     ).split()[0].decode('utf-8')
-    return size
+    return int(size)
+
+
+@BenchmarkMethod(desc='find with xargs cat and wc -c')
+def find_xargs_cat_wc_subprocess(path):
+    cmd = ('find ' + path + ' -type f | '
+           'xargs cat | '
+           'wc -c')
+    import subprocess
+    size = subprocess.check_output(
+        cmd, shell=True
+    ).split()[0].decode('utf-8').strip()
+    return int(size)
+
+
+@BenchmarkMethod(desc='find with while read cat and wc -c')
+def find_while_read_cat_wc_subprocess(path):
+    cmd = ('find ' + path + ' -type f | '
+           'while read s; do cat $s; done | '
+           'wc -c')
+    import subprocess
+    size = subprocess.check_output(
+        cmd, shell=True
+    ).split()[0].decode('utf-8').strip()
+    return int(size)
 
 
 def create_tree(path, depth, num_dirs, num_files):
@@ -152,38 +160,56 @@ def remove_tree(path):
     import shutil
     shutil.rmtree(path)
 
-def benchmark(path, method, count):
-    # Warm up file system's block cache
-    logging.info('Priming the system\'s cache...')
-    os_scandir_recursive(path)
 
+def benchmark(path, method, count):
     # Filter which methods are going to be tested
     if method == 'all':
         methods = METHODS
         logging.info('All available methods will be benchmarked...')
     else:
-        methods = { method: METHODS[method] }
+        methods = {method: METHODS[method]}
         logging.info('Only {0} method will be benchmarked...'.format(method))
 
+    # Warm up file system's block cache
+    logging.info('Priming the system\'s cache...')
+    for m in methods:
+        methods[m]['func'](path, ignore=True)
 
     # At each ietration run all methods and capture their timings
     for i in range(count):
         logging.debug('Benchmarking iteration #%i/%i...', i+1, count)
         for m in methods:
-            size = methods[m]['func'](path)
+            methods[m]['func'](path)
 
     # Print results for each method
     for m in methods:
+        results = methods[m]['results']
+        timings = [r['time'] for r in results]
+        sizes = [r['size'] for r in results]
+        # Determine if sizes are equal
+        is_same_sizes = sum(sizes) / len(sizes) == sizes[0]
+        if is_same_sizes:
+            sizes_msg = ''  # Do not print anything, if size is equal
+        else:
+            sizes_msg = '\n    Sizes are not equal: ('\
+                    + ', '.join(sizes) + ')\n'
         logging.info(
-            '%s method; best: %.3f; average: %.3f',
-            m,
-            min(methods[m]['timings']),
-            sum(methods[m]['timings']) / len(methods[m]['timings'])
+            ('Results of {} method:\n'
+             '  -  Average time: {:.3f}\n'
+             '  -     Best time: {:.3f}\n'
+             '  - Measured size: {:d}{}').format(
+                 m,
+                 sum(timings) / len(timings),
+                 min(timings),
+                 sizes[0],
+                 sizes_msg
+             )
         )
 
 
 def configure_logging():
-    fmt = '%(asctime)s %(filename)s %(levelname)8s %(message)s'
+    # fmt = '%(asctime)s %(filename)s %(levelname)8s %(message)s'
+    fmt = '%(asctime)s %(message)s'
     logging.basicConfig(level=logging.DEBUG, format=fmt)
 
 
@@ -277,7 +303,7 @@ def configure_argument_parser():
         '--dir-count',
         type=int,
         default=5,
-        dest='DIRS_COUNT',
+        dest='DIR_COUNT',
         metavar='COUNT',
         help=(
             'Number of subdirectories created at each nesting level.\n'
@@ -332,13 +358,27 @@ if __name__ == '__main__':
         # Exits if directory does not exist or not a directory
         assert_existing_dir(tree_dir)
     else:
-        tree_dir = os.path.join(os.path.dirname(__file__), 'benchmark_tree')
+        tree_dir = os.path.join(
+            os.path.dirname(__file__),
+            'benchmark_tree'
+        )
         if not os.path.exists(tree_dir):
-            logging.info('Creating test benchmark directory at %s', tree_dir)
-            create_tree(tree_dir, args.levels, args.num_dirs, args.num_files)
+            logging.info(
+                'Creating test benchmark directory at %s',
+                tree_dir
+            )
+            create_tree(
+                tree_dir,
+                args.DEPTH,
+                args.DIR_COUNT,
+                args.FILE_COUNT
+            )
             is_benchmark_tree_created = True  # rm -rf tree later
         else:
-            logging.info('Using existing test benchmark directory at %s', tree_dir)
+            logging.info(
+                'Using existing test benchmark directory at %s',
+                tree_dir
+            )
 
     # Run benchmark test
     benchmark(tree_dir, args.METHOD, args.COUNT)
