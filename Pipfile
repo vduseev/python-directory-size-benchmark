@@ -5,6 +5,7 @@ name = "pypi"
 
 [packages]
 memory-profiler = "*"
+perf = "*"
 
 [dev-packages]
 
