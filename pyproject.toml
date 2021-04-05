@@ -1,0 +1,22 @@
+[tool.poetry]
+authors = ["vduseev <vagiz@duseev.com>"]
+description = "Benchmark python directory size measurement speed"
+license = "Apache-2.0"
+name = "dir-size-benchmark"
+version = "1.0.1"
+
+[tool.poetry.scripts]
+dir-size-benchmark = "dir_size_benchmark.cli:run"
+
+[tool.poetry.dependencies]
+cleo = "^0.8.1"
+ilexconf = "^0.9.6"
+loguru = "^0.5.3"
+python = "^3.9"
+
+[tool.poetry.dev-dependencies]
+black = "^20.8b1"
+
+[build-system]
+build-backend = "poetry.core.masonry.api"
+requires = ["poetry-core>=1.0.0"]

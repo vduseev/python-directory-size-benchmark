@@ -1,18 +1,20 @@
 # Python directory size calculation benchmark
 
-This repository compliments the article about [fastest approach to directory calculation in Python](https://duseev.com/articles/fastest-directory-size-python/) published in the [duseev.com](https://duseev.com) blog.
+This repository compliments the article about
+[fastest approach to directory calculation in Python][blog-article]
+published on the [duseev.com](https://duseev.com) blog.
 
 ## Installation
 
-The repository is published with PyEnv `.python-version` file and Pipenv's `Pipfile`. However, it should run just fine on Python >= 3.5 on a Unix like system.
-
-```console
-pipenv install
+```shell
+poetry install
 ```
 
 ## Usage
 
-```console
+```shell
+$ poetry run dir-size-benchmark
+
 usage: benchmark.py [-h] [-p PATH] [-m METHOD] [-c COUNT] [--depth DEPTH]
                     [--dir-count COUNT] [--file-count COUNT]
 
@@ -75,7 +77,7 @@ optional arguments:
 
 ## Example
 
-Here is an example of benchmark's output for 
+Here is an example of benchmark's output for
 ```console
 python benchmark.py --number 3 --levels 4 --num-dirs 5
 ```
@@ -95,3 +97,4 @@ python benchmark.py --number 3 --levels 4 --num-dirs 5
 2018-05-06 04:32:29,991 Removing test benchmark directory at benchmark_tree
 ```
 
+[blog-article]: https://duseev.com/articles/fastest-directory-size-python/
